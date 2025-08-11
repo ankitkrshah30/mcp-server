@@ -1,0 +1,6 @@
+fastmcp
+google-generativeai
+requests
+python-dotenv
+uvicorn
+beautifulsoup4
