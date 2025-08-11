@@ -6,10 +6,8 @@ from typing import Annotated
 # Imports from the official starter kit
 from fastmcp import FastMCP
 from fastmcp.server.auth.providers.bearer import BearerAuthProvider, RSAKeyPair
-# --- FINAL FIX PART 1 ---
 from mcp import ErrorData, McpError
 from mcp.server.auth.provider import AccessToken
-# --- FINAL FIX PART 2 ---
 from mcp.types import Field, INTERNAL_ERROR
 
 # Our imports for the custom tool
@@ -71,18 +69,16 @@ async def analyze_business_image(
     """Takes base64 image data, analyzes it with Gemini, and returns a JSON string."""
     print("🧠 Analyzing business image...")
     try:
-        # Decode the base64 image from Puch
         image_bytes = base64.b64decode(puch_image_data)
         img = Image.open(io.BytesIO(image_bytes))
 
-        # Prepare for Gemini
-        model = genai.GenerativeModel('gemini-1.5-pro-latest')
+        # Using the model name you requested
+        model = genai.GenerativeModel('gemini-2.0-flash')
+
         prompt = """You are an expert at analyzing images of local Indian businesses. Analyze the provided image and respond ONLY with a single JSON object that strictly follows this structure: { "businessType": "...", "tags": ["...", "..."], "description": "..." }. The description should be a friendly, one-sentence summary."""
 
-        # Send to Gemini
         response = model.generate_content([prompt, img])
 
-        # Clean the response to get pure JSON
         raw_text = response.text
         first_brace = raw_text.find('{')
         last_brace = raw_text.rfind('}')
@@ -97,11 +93,12 @@ async def analyze_business_image(
         raise McpError(ErrorData(code=INTERNAL_ERROR, message=str(e)))
 
 
-# --- Run MCP Server (Following the Official Blueprint) ---
+# --- Run MCP Server ---
 app = mcp.streamable_http_app()
 
 if __name__ == "__main__":
     import uvicorn
 
-    # The README says the default port is 8086
-    uvicorn.run(app, host="0.0.0.0", port=8086)
+    # Get port from environment variable for Render, default to 8086 for local
+    port = int(os.getenv("PORT", 8086))
+    uvicorn.run(app, host="0.0.0.0", port=port)
