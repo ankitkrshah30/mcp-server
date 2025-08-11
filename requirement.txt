@@ -4,3 +4,4 @@ requests
 python-dotenv
 uvicorn
 beautifulsoup4
+Pillow
