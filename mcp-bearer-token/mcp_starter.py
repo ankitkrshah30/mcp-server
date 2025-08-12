@@ -2,6 +2,7 @@ import os
 import asyncio
 from dotenv import load_dotenv
 from typing import Annotated
+import json  # We need this to parse the JSON from Gemini
 
 # Imports from the official starter kit
 from fastmcp import FastMCP
@@ -16,6 +17,7 @@ import requests
 import base64
 import io
 from PIL import Image
+from pydantic import BaseModel  # Import BaseModel for our rich description
 
 # --- Load environment variables with CORRECT names ---
 load_dotenv()
@@ -61,21 +63,43 @@ async def validate() -> str:
     return MY_NUMBER
 
 
+# --- A RICHER TOOL DESCRIPTION ---
+class RichToolDescription(BaseModel):
+    description: str
+    use_when: str
+
+
+AasPaasDescription = RichToolDescription(
+    description="Analyzes an image of a local, unorganized Indian business (like a street vendor or small shop) and extracts structured information about it.",
+    use_when="Use this tool when a user provides a photo of a small shop, stall, or local service in India and wants to know what it is."
+)
+
+
 # --- Our Custom Tool: analyze_business_image ---
-@mcp.tool(description="Analyzes an image of a local business and returns a JSON object with its details.")
+@mcp.tool(description=AasPaasDescription.model_dump_json())
 async def analyze_business_image(
         puch_image_data: Annotated[str, Field(description="Base64-encoded image data to analyze.")]
 ) -> str:
-    """Takes base64 image data, analyzes it with Gemini, and returns a JSON string."""
+    """Takes base64 image data, analyzes it with the AI, and returns a formatted string."""
     print("🧠 Analyzing business image...")
     try:
         image_bytes = base64.b64decode(puch_image_data)
         img = Image.open(io.BytesIO(image_bytes))
 
-        # Using the model name you requested
+        # A MORE POWERFUL PROMPT
         model = genai.GenerativeModel('gemini-2.0-flash')
+        prompt = """You are an expert analyst specializing in India's informal economy. Your task is to analyze the provided image of a local, unorganized business and return a structured JSON object.
 
-        prompt = """You are an expert at analyzing images of local Indian businesses. Analyze the provided image and respond ONLY with a single JSON object that strictly follows this structure: { "businessType": "...", "tags": ["...", "..."], "description": "..." }. The description should be a friendly, one-sentence summary."""
+        The JSON object must strictly follow this structure:
+        {
+          "businessName": "A creative, descriptive name for the business (e.g., 'Sharma Ji's Chai Stall')",
+          "businessType": "A clear category (e.g., 'Street Food Vendor', 'Tailor Shop', 'Cobbler', 'Electronics Repair')",
+          "estimatedLocation": "A general description of the location (e.g., 'Roadside stall in a busy market', 'Small shop in a residential alley')",
+          "keyItems": ["A list of key items or services visible (e.g., 'Tea', 'Samosa', 'Sewing Machine', 'Shoes')", "...", "..."],
+          "description": "A friendly, one-sentence summary for a user."
+        }
+
+        Analyze the image and provide ONLY the JSON object. Do NOT include any other text or markdown formatting."""
 
         response = model.generate_content([prompt, img])
 
@@ -84,8 +108,26 @@ async def analyze_business_image(
         last_brace = raw_text.rfind('}')
         if first_brace != -1 and last_brace != -1:
             clean_json = raw_text[first_brace:last_brace + 1]
-            print("✅ Analysis complete.")
-            return clean_json
+
+            # A FRIENDLIER OUTPUT FOR THE USER
+            data = json.loads(clean_json)
+
+            # --- THE CHANGE IS HERE ---
+            # I've made the final line more generic.
+            response_to_user = (
+                f'I think I see a *{data.get("businessType", "Local Business")}*!\n\n'
+                f'🏷️ **Name:** {data.get("businessName", "N/A")}\n'
+                f'📍 **Location:** {data.get("estimatedLocation", "N/A")}\n\n'
+                f'**What I can see:**\n'
+            )
+            for item in data.get("keyItems", []):
+                response_to_user += f"- {item}\n"
+
+            response_to_user += f'\n> {data.get("description", "No summary available.")}\n\n'
+            response_to_user += f'*Powered by AI • For local businesses*'
+
+            print("✅ Analysis complete. Returning formatted Markdown.")
+            return response_to_user
         else:
             raise McpError(ErrorData(code=INTERNAL_ERROR, message="Failed to generate valid JSON from AI response."))
     except Exception as e:
@@ -99,6 +141,5 @@ app = mcp.streamable_http_app()
 if __name__ == "__main__":
     import uvicorn
 
-    # Get port from environment variable for Render, default to 8086 for local
     port = int(os.getenv("PORT", 8086))
     uvicorn.run(app, host="0.0.0.0", port=port)
