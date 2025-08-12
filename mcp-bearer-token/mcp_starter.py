@@ -63,6 +63,16 @@ async def validate() -> str:
     return MY_NUMBER
 
 
+# --- NEW TOOL: about ---
+@mcp.tool
+async def about() -> dict:
+    """Returns the name and a description of this MCP server."""
+    return {
+        "name": mcp.name,
+        "description": "An AI-powered server to identify local Indian businesses from a photo. Built for the #BuildWithPuch Hackathon."
+    }
+
+
 # --- A RICHER TOOL DESCRIPTION ---
 class RichToolDescription(BaseModel):
     description: str
@@ -112,8 +122,6 @@ async def analyze_business_image(
             # A FRIENDLIER OUTPUT FOR THE USER
             data = json.loads(clean_json)
 
-            # --- THE CHANGE IS HERE ---
-            # I've made the final line more generic.
             response_to_user = (
                 f'I think I see a *{data.get("businessType", "Local Business")}*!\n\n'
                 f'🏷️ **Name:** {data.get("businessName", "N/A")}\n'
